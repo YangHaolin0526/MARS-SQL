@@ -2,4 +2,4 @@
 This repository contains the official implementation of MARS-SQL.
 
 ## 🧭 Overview
-![Pipeline](figures/sql_agent0925.png)
+![Pipeline](figs/sql_agent0925.png)
