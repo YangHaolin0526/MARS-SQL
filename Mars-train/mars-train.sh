@@ -8,7 +8,7 @@ BASE_MODEL='Qwen/Qwen2.5-Coder-7B-Instruct'
 CKPT_PATH=''
 
 PROJECT_NAME='MARS-SQL'
-EXPERIMENT_NAME=""
+EXPERIMENT_NAME="Bird_train"
 
 echo "INFO: Deleting previous experiment directory to ensure a fresh start..."
 rm -rf $CKPT_PATH/$PROJECT_NAME/$EXPERIMENT_NAME
