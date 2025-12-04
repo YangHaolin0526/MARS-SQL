@@ -57,7 +57,7 @@ We recommend running inference in a separate environment to avoid dependency con
 
 ```bash
 # (Optional, but recommended) Create and activate a new virtual environment
-conda create -n mars-infer python=3.9 -y
+conda create -n mars-infer python=3.10 -y
 conda activate mars-infer
 
 # Install all required packages
