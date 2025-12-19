@@ -1,0 +1,22 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: openhands-cluster
+  # change as needed
+  region: us-west-2
+
+nodeGroups:
+  - name: nvme-storage-2
+    instanceType: i4i.4xlarge
+    desiredCapacity: 8
+    privateNetworking: false
+    volumeSize: 50
+    labels:
+      node-group: nvme-storage
+    securityGroups:
+      # Change this to your security group ID
+      attachIDs: [sg-<security-group-id>]
+    preBootstrapCommands:
+      - apt install -y xfsprogs
+      # Mount the NVME volume
+      - if ! grep -qs '/mnt/nvme' /proc/mounts; then mkfs.xfs -f /dev/nvme1n1; mkdir -p /mnt/nvme; mount /dev/nvme1n1 /mnt/nvme; echo "/dev/nvme1n1 /mnt/nvme xfs defaults 0 0" >> /etc/fstab; fi

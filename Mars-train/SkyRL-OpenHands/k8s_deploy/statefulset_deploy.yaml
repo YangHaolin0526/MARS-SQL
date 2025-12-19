@@ -1,0 +1,190 @@
+########################################
+# 1) StorageClass for EFS
+########################################
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+parameters:
+# Make sure to change this to your own EFS file system ID.
+  fileSystemId: fs-<file-system-id>
+  directoryPerms: "700"
+  provisioningMode: efs-ap
+mountOptions:
+  - tls
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+
+---
+########################################
+# 2) PersistentVolumeClaim for EFS
+########################################
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: efs-pvc
+spec:
+  storageClassName: efs-sc
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+########################################
+# 4) Entrypoint script
+########################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhands-entrypoint-config
+data:
+  entrypoint.sh: |
+    #!/bin/bash
+
+    echo "Starting installation process..."
+    apt update
+    apt install -y xfsprogs netcat-traditional iproute2
+
+    echo "Starting cron"
+    service cron start
+    service cron status
+
+    echo "Configuring docker credentials"
+    mkdir -p /root/.docker
+    echo $DOCKER_AUTH > /root/.docker/config.json
+    chmod 600 /root/.docker/config.json
+
+
+    df -hT
+
+    echo "Configuring Docker daemon..."
+    mkdir -p /etc/docker/
+    cat > /etc/docker/daemon.json << EOF
+    {
+      "data-root": "/mnt/nvme/docker",
+      "runtimes": {
+        "crun": {
+          "path": "/usr/local/bin/crun"
+        }
+      },
+      "default-runtime": "crun"
+    }
+    EOF
+
+    echo "Starting Docker daemon..."
+    dockerd > /var/log/dockerd.log 2>&1 &
+    # Wait for Docker to start
+    for i in $(seq 1 30); do
+      if docker info > /dev/null 2>&1; then
+        echo "Docker started successfully"
+        break
+      fi
+      echo "Waiting for Docker to start... ($i/30)"
+      sleep 1
+    done
+
+    if ! docker info > /dev/null 2>&1; then
+      echo "Docker failed to start, check logs"
+      cat /var/log/dockerd.log
+      exit 1
+    fi
+
+    # Start the Python server in a tmux session so it can run in the background
+    echo "Starting Python server in tmux session..."
+    apt install -y tmux
+    tmux new-session -d -s 0
+    export EXTERNAL_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
+    export TIMESTAMP=$(date +%s)
+    tmux send-keys -t 0 "poetry run python -m openhands.runtime.remote_runtime_server.main --host $EXTERNAL_IP --port 3000  2>&1 | tee /data/${POD_NAME}_${TIMESTAMP}.log" C-m
+
+    # Keep the container running
+    sleep infinity
+---
+########################################
+# 3) Pod YAML (modified to include EFS)
+########################################
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openhands
+spec:
+  serviceName: "openhands"
+  replicas: 8
+  selector:
+    matchLabels:
+      app: openhands
+  template:
+    metadata:
+      labels:
+        app: openhands
+    spec:
+      nodeSelector:
+        node-group: nvme-storage-2
+      hostNetwork: true
+      securityContext:
+        supplementalGroups: [999]
+      containers:
+      - name: openhands
+        image: sumanthrh/openhands-dev:23
+        command: ["/bin/bash", "-c", "/scripts/entrypoint.sh"]
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        env:
+          - name: LOG_ALL_EVENTS
+            value: "true"
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: DOCKER_AUTH
+            valueFrom:
+              secretKeyRef:
+                name: regcred
+                key: .dockerconfigjson
+          - name: OPENHANDS_API_KEY
+           # Make sure to customize this for your own deployment.
+           # You can also import this from a secret.
+            value: "sandbox-remote"
+        resources:
+          requests:
+            memory: "110Gi"
+            ephemeral-storage: "120Gi"
+          limits:
+            memory: "120Gi" # leave some room
+            ephemeral-storage: "120Gi"
+        volumeMounts:
+          - name: openhands-state
+            mountPath: /.openhands-state
+          - name: efs-data
+            mountPath: /data
+          - name: entrypoint-script-volume
+            mountPath: /scripts
+          - name: openhands-nvme
+            mountPath: /mnt/nvme
+      volumes:
+      - name: openhands-state
+        hostPath:
+          path: /root/.openhands-state
+      - name: efs-data
+        persistentVolumeClaim:
+          claimName: efs-pvc
+      - name: openhands-nvme
+        hostPath:
+          path: /mnt/nvme
+          type: Directory
+      - name: entrypoint-script-volume
+        configMap:
+          name: openhands-entrypoint-config
+          defaultMode: 0777  # Make script executable
