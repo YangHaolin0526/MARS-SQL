@@ -1,21 +1,38 @@
-# MARS-SQL: A MULTI-AGENT REINFORCEMENT LEARNING FRAMEWORK FOR TEXT-TO-SQL
+# MARS-SQL: A Multi-Agent Reinforcement Learning Framework for Text-to-SQL
 
 [![arXiv](https://img.shields.io/badge/arXiv-2511.01008-b31b1b.svg)](https://arxiv.org/abs/2511.01008)
+[![ICML 2026](https://img.shields.io/badge/ICML-2026-4b44ce.svg)](https://icml.cc/virtual/2026/poster/65053)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.12-blue)](https://www.python.org/)
 
-This repository contains the official implementation of MARS-SQL.
+This repository contains the official implementation of MARS-SQL, accepted at the
+**43rd International Conference on Machine Learning (ICML 2026)**.
 
 ## 🧭 Overview
-![Pipeline](figs/sql_agent0925.png)
+
+![MARS-SQL multi-agent training and inference pipeline](figs/sql_agent0925.png)
+
+## 📁 Repository layout
+
+| Path | Contents |
+| :--- | :--- |
+| [`Mars-train/`](./Mars-train/) | Reinforcement-learning environment, configuration, and training entry point |
+| [`Mars-inference/`](./Mars-inference/) | Generation, candidate selection, and execution-based evaluation tools |
+| [`data/`](./data/) | Prepared Parquet inputs for BIRD, Spider, and validation runs |
+| [`figs/`](./figs/) | Architecture and workflow figures used by the documentation |
 
 ## 📚 Citation
+
+Please cite the ICML 2026 paper using the entry below (also available as
+[`CITATION.bib`](./CITATION.bib)):
+
 ```bibtex
-@article{yang2025mars,
-  title={MARS-SQL: A multi-agent reinforcement learning framework for Text-to-SQL},
-  author={Yang, Haolin and Zhang, Jipeng and He, Zhitao and Fung, Yi R},
-  journal={arXiv preprint arXiv:2511.01008},
-  year={2025}
+@inproceedings{yang2026marssql,
+  title={A Multi-Agent Reinforcement Learning Framework For Text-To-SQL},
+  author={Yang, Haolin and Zhang, Youran and others},
+  booktitle={Proceedings of the 43rd International Conference on Machine Learning (ICML)},
+  year={2026},
+  url={https://icml.cc/virtual/2026/poster/65053}
 }
 ```
 
@@ -26,27 +43,28 @@ This repository contains the official implementation of MARS-SQL.
 ### 1. Training
 
 #### Environment Setup
-Please refer to [Mars-train/Install.md](./Mars-train/Install.md) for detailed environment installation instructions using `uv` and `ray`.
+Please refer to the [training guide](./Mars-train/README.md) and
+[installation notes](./Mars-train/Install.md) for environment setup using `uv`
+and Ray.
 
 #### Dataset Preparation
 1. Download the **BIRD dataset** (dev/train databases) from the [official BIRD benchmark page](https://bird-bench.github.io/).
 2. Unzip the dataset and note the absolute path to the database directory.
 
-#### ⚙️ Configuration (Crucial Step)
-Before running the training script, you **must** update the BIRD database paths in the following three files to match your local setup:
+#### ⚙️ Configuration
 
-1.  `mars-train.sh`
-2.  `Mars-train/verl/workers/agentic/llm_sql_agent/sqlact.py`
-3.  `Mars-train/verl/workers/reward_manager/sql.py`
-
-> [!WARNING]
-> Failure to update the database paths in **all three** locations will result in execution errors.
+The entry point reads local paths and credentials from environment variables;
+source files do not need to be edited. At minimum, set `DB_PATH`, `CKPT_PATH`,
+and `WANDB_API_KEY`.
 
 #### Run Training
 Once configured, execute the training script:
 
 ```bash
-bash mars-train.sh
+export DB_PATH=/absolute/path/to/bird/databases
+export CKPT_PATH=/absolute/path/to/checkpoints
+export WANDB_API_KEY=your_wandb_api_key
+bash Mars-train/mars-train.sh
 ```
 
 ### 2. Inference
@@ -67,7 +85,7 @@ pip install -r requirements.txt
 
 **💾 Using Pre-trained Models**
 
-Our trained MARS-SQL models (based on Qwen-7B) are publicly available on Hugging Face. You can download and use these weights directly for inference by updating the model path in the inference script:
+Our trained MARS-SQL models (based on Qwen-7B) are publicly available on Hugging Face:
 
 | Model Name | Description | Hugging Face Link |
 | :--- | :--- | :--- |
@@ -79,6 +97,7 @@ Our trained MARS-SQL models (based on Qwen-7B) are publicly available on Hugging
 The following command will generate 16 trajectories for each question in the dataset:
 
 ```bash
+export DB_PATH=/absolute/path/to/bird/databases
 bash inference.sh
 ```
 
@@ -91,3 +110,6 @@ After generating the inference results (parquet file), use the evaluation script
 ```bash
 python evaluate_sql.py --input_file step80_bird_@16_turn5_test_result.parquet --db_path Bird_DB_PATH
 ```
+
+See the [inference guide](./Mars-inference/README.md) for all configurable paths,
+model overrides, and candidate-selection utilities.

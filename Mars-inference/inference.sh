@@ -1,36 +1,46 @@
-set -x
-export TMPDIR=''
-export RAY_TMPDIR=''
+#!/usr/bin/env bash
+set -euo pipefail
 
-export HF_HUB_OFFLINE=1
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-data_path=/data/bird_test.parquet
+: "${DB_PATH:?Set DB_PATH to the root directory containing the benchmark databases.}"
 
-save_path=step80_bird_@16_turn5_test_result.parquet
-# model_path=Qwen/Qwen2.5-Coder-7B-Instruct
-model_path=Yanghl0526/Qwen-SQL-7B-bird_5turns_80step
+DATA_PATH="${DATA_PATH:-${REPO_ROOT}/data/bird_test.parquet}"
+SAVE_PATH="${SAVE_PATH:-${SCRIPT_DIR}/step80_bird_@16_turn5_test_result.parquet}"
+MODEL_PATH="${MODEL_PATH:-Yanghl0526/Qwen-SQL-7B-bird_5turns_80step}"
+STABLE_WORKDIR="${STABLE_WORKDIR:-${SCRIPT_DIR}/outputs/hydra}"
 
-# sleep 5
-export CUDA_VISIBLE_DEVICES=6
+if [[ ! -f "${DATA_PATH}" ]]; then
+    echo "ERROR: DATA_PATH is not a file: ${DATA_PATH}" >&2
+    exit 1
+fi
+if [[ ! -d "${DB_PATH}" ]]; then
+    echo "ERROR: DB_PATH is not a directory: ${DB_PATH}" >&2
+    exit 1
+fi
 
-export WORLD_SIZE=1
-export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
-export RANK=0
-export LOCAL_RANK=0
-export NCCL_P2P_DISABLE="1"
-STABLE_WORKDIR=""
-mkdir -p $STABLE_WORKDIR
+mkdir -p -- "$(dirname -- "${SAVE_PATH}")" "${STABLE_WORKDIR}"
+cd -- "${SCRIPT_DIR}"
+
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export WORLD_SIZE="${WORLD_SIZE:-1}"
+export TORCH_NCCL_ASYNC_ERROR_HANDLING="${TORCH_NCCL_ASYNC_ERROR_HANDLING:-1}"
+export RANK="${RANK:-0}"
+export LOCAL_RANK="${LOCAL_RANK:-0}"
+export NCCL_P2P_DISABLE="${NCCL_P2P_DISABLE:-1}"
 
 python3 -m verl.trainer.main_generation \
     trainer.nnodes=1 \
     trainer.n_gpus_per_node=1 \
-    data.path=$data_path \
+    "data.path=${DATA_PATH}" \
     data.prompt_key=prompt \
     data.n_samples=1 \
     data.batch_size=8 \
-    data.output_path=$save_path \
-    +data.base_db_path=bird_databse \
-    model.path=$model_path \
+    "data.output_path=${SAVE_PATH}" \
+    "+data.base_db_path=${DB_PATH}" \
+    "model.path=${MODEL_PATH}" \
     +model.trust_remote_code=True \
     rollout.name=async \
     rollout.temperature=0.8 \
@@ -47,9 +57,7 @@ python3 -m verl.trainer.main_generation \
     +rollout.sql.max_prompt_length=3096 \
     +rollout.sql.max_response_length=5096 \
     +rollout.sql.max_obs_length=1024 \
-    +rollout.sql.db_path=bird_database \
+    "+rollout.sql.db_path=${DB_PATH}" \
     +rollout.n_trajectories=16 \
     +rollout.sampling_params.max_new_tokens=1024 \
-    hydra.run.dir=$STABLE_WORKDIR
-    # +rollout.enable_memory_saver=True \
-    # +trainer.hybrid_engine=True
+    "hydra.run.dir=${STABLE_WORKDIR}"

@@ -1,0 +1,18 @@
+# Local Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local credentials and experiment tracking
+.env
+.env.*
+wandb/
+
+# Generated inference artifacts
+Mars-inference/outputs/
+Mars-inference/step*_result.parquet
+Mars-inference/evaluation_log.tsv
+Mars-inference/result_score.txt
+
+# OS metadata
+.DS_Store
